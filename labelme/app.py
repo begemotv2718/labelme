@@ -3,6 +3,7 @@ import os
 import os.path as osp
 import re
 import webbrowser
+import PyQt5
 
 from qtpy import QtCore
 from qtpy.QtCore import Qt
@@ -300,6 +301,10 @@ class MainWindow(QtWidgets.QMainWindow):
             'Start drawing linestrip. Ctrl+LeftClick ends creation.',
             enabled=False,
         )
+        growMode = action('Grow polygons',self.setGrowMode,
+                          shortcuts['grow_polygon'], 'edit',
+                          'Grow selected polygon', enabled = False)
+
         editMode = action('Edit Polygons', self.setEditMode,
                           shortcuts['edit_polygon'], 'edit',
                           'Move and edit the selected polygons', enabled=False)
@@ -317,6 +322,8 @@ class MainWindow(QtWidgets.QMainWindow):
         addPoint = action('Add Point to Edge', self.canvas.addPointToEdge,
                           None, 'edit', 'Add point to the nearest edge',
                           enabled=False)
+
+        delPoint = action('Delete point', self.canvas.delPoint, None, 'edit', 'Delete selected point',enabled=False)
 
         undo = action('Undo', self.undoShapeEdit, shortcuts['undo'], 'undo',
                       'Undo last add and edit of shape', enabled=False)
@@ -416,7 +423,9 @@ class MainWindow(QtWidgets.QMainWindow):
             delete=delete, edit=edit, copy=copy,
             undoLastPoint=undoLastPoint, undo=undo,
             addPoint=addPoint,
+            delPoint=delPoint,
             createMode=createMode, editMode=editMode,
+            growMode=growMode,
             createRectangleMode=createRectangleMode,
             createCircleMode=createCircleMode,
             createLineMode=createLineMode,
@@ -440,6 +449,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 createPointMode,
                 createLineStripMode,
                 editMode,
+                growMode,
                 edit,
                 copy,
                 delete,
@@ -448,6 +458,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 undo,
                 undoLastPoint,
                 addPoint,
+                delPoint,
             ),
             onLoadActive=(
                 close,
@@ -458,11 +469,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 createPointMode,
                 createLineStripMode,
                 editMode,
+                growMode,
             ),
             onShapesPresent=(saveAs, hideAll, showAll),
         )
 
         self.canvas.edgeSelected.connect(self.actions.addPoint.setEnabled)
+        self.canvas.edgeSelected.connect(self.actions.delPoint.setEnabled)
 
         self.menus = utils.struct(
             file=self.menu('&File'),
@@ -539,6 +552,7 @@ class MainWindow(QtWidgets.QMainWindow):
             None,
             createMode,
             editMode,
+            growMode,
             copy,
             delete,
             undo,
@@ -654,6 +668,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.actions.createPointMode,
             self.actions.createLineStripMode,
             self.actions.editMode,
+            self.actions.growMode,
         )
         utils.addActions(self.menus.edit, actions + self.actions.editMenu)
 
@@ -748,6 +763,7 @@ class MainWindow(QtWidgets.QMainWindow):
         In the middle of drawing, toggling between modes should be disabled.
         """
         self.actions.editMode.setEnabled(not drawing)
+        self.actions.growMode.setEnabled(not drawing)
         self.actions.undoLastPoint.setEnabled(drawing)
         self.actions.undo.setEnabled(not drawing)
         self.actions.delete.setEnabled(not drawing)
@@ -811,6 +827,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def setEditMode(self):
         self.toggleDrawMode(True)
+
+    def setGrowMode(self):
+        self.canvas.growShape()
+        self.setDirty()
 
     def updateFileMenu(self):
         current = self.filename
@@ -913,6 +933,7 @@ class MainWindow(QtWidgets.QMainWindow):
         n_selected = len(selected_shapes)
         self.actions.delete.setEnabled(n_selected)
         self.actions.copy.setEnabled(n_selected)
+        self.actions.growMode.setEnabled(n_selected)
         self.actions.edit.setEnabled(n_selected == 1)
         self.actions.shapeLineColor.setEnabled(n_selected)
         self.actions.shapeFillColor.setEnabled(n_selected)
@@ -1220,7 +1241,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.filename = filename
         if self._config['keep_prev']:
             prev_shapes = self.canvas.shapes
-        self.canvas.loadPixmap(QtGui.QPixmap.fromImage(image))
+        self.canvas.loadImage(image)
         if self._config['flags']:
             self.loadFlags({k: False for k in self._config['flags']})
         if self.labelFile:

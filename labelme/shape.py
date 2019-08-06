@@ -5,6 +5,7 @@ from qtpy import QtCore
 from qtpy import QtGui
 
 import labelme.utils
+import numpy as np
 
 
 # TODO(unknown):
@@ -89,8 +90,21 @@ class Shape(object):
             return self.points.pop()
         return None
 
+    def getNpPath(self):
+        path=[]
+        if self.points:
+            for point in self.points:
+                path.append([point.x(),point.y()])
+        #return np.array(path)
+        return path
+
+
     def insertPoint(self, i, point):
         self.points.insert(i, point)
+
+    def delPoint(self,i):
+        if(i>=0 and i<len(self.points)):
+            del(self.points[i])
 
     def isClosed(self):
         return self._closed

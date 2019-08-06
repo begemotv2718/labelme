@@ -5,6 +5,8 @@ from qtpy import QtWidgets
 from labelme import QT5
 from labelme.shape import Shape
 import labelme.utils
+import cv2
+import numpy as np
 
 
 # TODO(unknown):
@@ -283,6 +285,19 @@ class Canvas(QtWidgets.QWidget):
         self.hVertex = index
         self.hEdge = None
 
+    def delPoint(self):
+        if(self.hShape is None and self.hVertex is None):
+            return
+
+        shape = self.hShape
+        if shape.shape_type == 'polygon':
+            index = self.hVertex
+            shape.delPoint(index)
+        self.hVertex=None
+        self.hEdge = None
+        self.hShape = shape
+
+
     def mousePressEvent(self, ev):
         if QT5:
             pos = self.transformPos(ev.localPos())
@@ -362,6 +377,84 @@ class Canvas(QtWidgets.QWidget):
         self.repaint()
         self.storeShapes()
         return True
+
+
+    def growShape(self):
+        im=self.image.convertToFormat(QtGui.QImage.Format_RGB888)
+        width=im.width()
+        height=im.height()
+        ptr = im.constBits()
+        ptr.setsize(height*width*3)
+        np_img=np.array(ptr,dtype=np.uint8).reshape(height,width,3)
+        cv2.imwrite('/tmp/bus.jpg',np_img)
+        contour=None
+
+
+        for shapenum,shape in enumerate(self.selectedShapes):
+            #contour=shape.
+            try:
+                mask = np.ones(np_img.shape[:2],dtype=np.uint8)*cv2.GC_PR_BGD
+                mask1 = np.zeros(np_img.shape[:2],dtype=np.uint8)
+                testcontour=[]
+                if(shape.shape_type == 'polygon'):
+                    contour=shape.getNpPath()
+                    cv2.fillPoly(mask1,pts=[np.array(contour,dtype=np.int32)],color=(255,255,255))
+                    testcontour = contour
+                elif(shape.shape_type == 'rectangle'):
+                    line=shape.getNpPath()
+                    print("Rectangle line:",line)
+                    #contour=line[0],
+                    cv2.fillPoly(mask1,contour,color=(255,255,255))
+                    testcontour=contour
+                elif(shape.shape_type=='circle'):
+                    #cv2.fillEllipse() ##???
+                    pass
+            except Exception as e:
+                #import code
+                #code.interact(local=locals())
+                print("Exception:",e)
+                print("img:",np_img.shape)
+                print(contour)
+
+
+
+            
+            mask[mask1==255]=cv2.GC_FGD
+            bgdmodel=np.zeros((1,65),np.float64)
+            fgdmodel=np.zeros((1,65),np.float64)
+            cv2.grabCut(np_img,mask,(0,0,width,height),bgdmodel,fgdmodel,1,cv2.GC_INIT_WITH_MASK)
+            mask3=np.where((mask==1)+(mask==3),255,0).astype(np.uint8)
+            contours,hierarchy=cv2.findContours(mask3,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_TC89_L1)
+            for cont in contours:
+                flag=True
+                for p in testcontour:
+                    if cv2.pointPolygonTest(cont,tuple(p),True)<0:
+                        flag=False
+                if flag:
+                    #cv2.drawContours(np_img,[cont],0,(255,0,0),2)
+                    #cv2.imwrite('/tmp/contours.jpg',np_img)
+                    
+                    ## Simplify contour
+                    curve_len = cv2.arcLength(cont,True)
+                    new_contour=cv2.approxPolyDP(cont,0.002*curve_len,True)
+
+                    new_shape=Shape(label=shape.label,shape_type='polygon')
+                    for point in new_contour:
+                        print("Point=",point)
+                        x,y=tuple(point[0])
+                        new_shape.addPoint(QtCore.QPointF(x,y))
+                    if(shape.line_color):
+                        new_shape.line_color=shape.line_color
+                    new_shape.close()
+                    self.selectedShapesCopy.append(new_shape)
+                    break
+                        
+            if(not flag):
+                # We found no good contour
+                self.selectedShapesCopy.append(self.selectedShapes[shapenum])
+            self.endMove(copy=False)
+
+
 
     def hideBackroundShapes(self, value):
         self.hideBackround = value
@@ -680,8 +773,9 @@ class Canvas(QtWidgets.QWidget):
             self.drawingPolygon.emit(False)
         self.repaint()
 
-    def loadPixmap(self, pixmap):
-        self.pixmap = pixmap
+    def loadImage(self, image):
+        self.image = image
+        self.pixmap = QtGui.QPixmap.fromImage(image) 
         self.shapes = []
         self.repaint()
 
