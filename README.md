@@ -19,6 +19,10 @@
   <img src="examples/instance_segmentation/.readme/annotation.jpg" width="70%">
 </div>
 
+## Description of changes in this fork
+
+This fork is for experimenting with opencv automatic region selection using grabCut algorithm.
+
 ## Description
 
 Labelme is a graphical image annotation tool inspired by <http://labelme.csail.mit.edu>.  
